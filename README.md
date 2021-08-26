@@ -49,3 +49,12 @@ $ vi include/common.h
 #define KEYLENGTH 32 // Set String key length (current : 32)
 #define MULTIPOOL    // Use multiple NUMA Persistent Memory Pool 
 ```
+## Example
+If you want to use PACTree for your project, please follow below:
+```
+1. Make your project directory
+2. Add your project directory to the CMakeLists.txt
+3. Write CMakeLists.txt for your project to your project directory
+```
+Please refer ./CMakeLists.txt, example/example.cpp, example/CMakeLists.txt.  
+You can find the example at build/example/.  
