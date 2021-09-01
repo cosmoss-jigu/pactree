@@ -183,14 +183,14 @@ void pactreeImpl::createCombinerThread() {
 
 pactreeImpl *initPT(int numa){
     const char* path = "/mnt/pmem0/dl";
-    size_t sz = 10UL*1024UL*1024UL*1024UL; //10GB
+    size_t sz = 1UL*1024UL*1024UL*1024UL; //10GB
     int isCreated = 0;
     int isCreated2 = 0;
     root_obj* root = nullptr;
     root_obj* sl_root = nullptr;
 
    const char *sl_path = "/mnt/pmem0/sl";
-   size_t sl_size = 10UL*1024UL*1024UL*1024UL;
+   size_t sl_size = 1UL*1024UL*1024UL*1024UL;
 
    PMem::bind(0,sl_path,sl_size,(void **)&sl_root,&isCreated);
     if (isCreated == 0) {

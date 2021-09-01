@@ -177,11 +177,17 @@ static inline unsigned int max_cpu_freq(void)
 #define cache_prefetchw_mid(__ptr) __builtin_prefetch((void *)__ptr, 1, 2)
 
 #define cache_prefetchw_low(__ptr) __builtin_prefetch((void *)__ptr, 1, 0)
-
+#ifdef NO_CLWB
 static inline void clwb(volatile void *p)
 {
-	asm volatile(".byte 0x66; xsaveopt %0" : "+m" (p));
+        asm volatile("clflush (%0)" ::"r"(p));
 }
+#else
+static inline void clwb(volatile void *p)
+{
+        asm volatile(".byte 0x66; xsaveopt %0" : "+m" (p));
+}
+#endif
 
 #ifdef __cplusplus
 }

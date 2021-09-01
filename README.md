@@ -15,12 +15,37 @@ pactree
 ├── src                 # pactree source code 
 ├── tools               # misc build tools
 ```
+## System configuration 
+- Fedora 29 or higher //  Ubuntu 18.04 or higher
+- x86-64 CPU supporting AVX512 instructions
+```
+# You can check using the following command:
+$ cat /proc/cpuinfo | egrep -ho 'avx[^ ]*' | sort -u
+```
+- gcc 7.0 or higher
+- at least 30 GB for each partition of NVM or SSD
+
+
 ## Dependency
 ### Install packages
+- Install latest version of CMake
+``` 
+1. Download latest version from https://cmake.org/download/
+$ tar -xvf cmake-your_version.tar.gz
+$ cd cmake-your-version
+$ ./bootstrap
+$ make 
+$ sudo make install
 ```
-$ sudo apt-get install cmake g++ libtbb-dev libjemalloc-dev libnuma-dev libpmem-dev libpmemobj-dev python3 // for Ubuntu
-$ sudo yum install cmake g++ tbb jemalloc numactl libpmem libpmemobj python3 // for Fedora 
+- Install other packages
 ```
+#Ubuntu
+$ sudo apt-get install g++ libtbb-dev libjemalloc-dev libnuma-dev libpmem-dev libpmemobj-dev python zlib1g-dev libboost-dev 
+
+#Felodra
+$ sudo yum install cmake make gcc-c++ tbb-devel jemalloc-devel numactl-devel libpmem-devel libpmemobj-devel python3 zlib-devel boost-devel 
+```
+
 ## Environment setting for actual NVM
 ### Mount dax file systems
 ```

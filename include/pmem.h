@@ -111,7 +111,7 @@ class PMem {
 			int ret;
 
 			if (access(nvm_path, F_OK) != 0) {
-				pop = pmemobj_create(nvm_path, POBJ_LAYOUT_NAME(nv), 100UL*1024UL*1024UL*1024UL, 0666);
+				pop = pmemobj_create(nvm_path, POBJ_LAYOUT_NAME(nv), size, 0666);
 				if(pop == nullptr){
 					std::cerr<<"bind create error"<<std::endl;	
 					return false;
@@ -119,7 +119,7 @@ class PMem {
 				baseAddresses[poolId*3+2] = reinterpret_cast<void*>(pop);
 				PMEMoid logSpace;
 				//       PMEMoid g_root = pmemobj_root(pop, 64UL*1024UL*1024UL*1024UL);
-				int ret = pmemobj_alloc(pop, &logSpace, 1UL*1024UL*1024UL*1024UL, 0, NULL, NULL);
+				int ret = pmemobj_alloc(pop, &logSpace, 512UL*1024UL*1024UL, 0, NULL, NULL);
 				if(ret){
 					std::cerr<<"!!! alloc error"<<std::endl;	
 					return false;
