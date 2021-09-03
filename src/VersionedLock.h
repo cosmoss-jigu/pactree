@@ -26,9 +26,9 @@ public:
 			// versionLock = 2;
 			version_t new_ver = (genId << 32) + 2;
 			if(version.compare_exchange_weak(ver, new_ver)){
-				return 0;	    
+				return new_ver;	    
 			}
-			return new_ver;
+			return 0;
 		}
 		else{
 			if ((ver & 1) != 0) {
@@ -50,9 +50,9 @@ public:
 			// versionLock = 2;
 			version_t new_ver = (genId << 32) + 3;
 			if(version.compare_exchange_weak(ver, new_ver)){
-				return 0;	    
+				return new_ver;	    
 			}
-			return new_ver;
+			return 0;
 
 		}
 		else{

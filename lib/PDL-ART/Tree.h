@@ -16,12 +16,12 @@ namespace ART_ROWEX {
     class Tree {
     public:
         using LoadKeyFunction = void (*)(TID tid, Key &key);
+	uint64_t genId;
 
     private:
         pptr<N> root;
         //N *const root;
 
-	uint64_t genId;
    TID checkKey(const TID tid, const Key &k) const;
 
     LoadKeyFunction loadKey;
@@ -85,6 +85,7 @@ namespace ART_ROWEX {
 
     public:
 
+        void recover();
         Tree(LoadKeyFunction loadKey);
 
         Tree(const Tree &) = delete;

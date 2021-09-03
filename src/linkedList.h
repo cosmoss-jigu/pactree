@@ -26,7 +26,7 @@ public:
     void print(ListNode *head);
     uint32_t size(ListNode* head);
     ListNode* getHead();
-    bool Recovery();
+    bool Recovery(void* sl);
 };
 void printDists();
 

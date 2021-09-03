@@ -2,8 +2,10 @@
 #include <iostream>
 #include <cassert>
 #include "linkedList.h"
+#include "SearchLayer.h"
 //std::atomic<int> numSplits;
 std::atomic<uint64_t> dists[5];
+extern std::mutex mtx[112];
 
 void printDists(){
 	uint64_t sum =0 ;
@@ -31,6 +33,7 @@ void printMemAmount(){
 }
 
 ListNode* LinkedList::initialize() {
+    genId =0;
     OpStruct* oplog = (OpStruct *)PMem::getOpLog(0);
 
     PMem::alloc(1,sizeof(ListNode),(void **)&headPtr,&(oplog->newNodeOid));
@@ -44,6 +47,8 @@ ListNode* LinkedList::initialize() {
     PMem::alloc(1,sizeof(ListNode),(void **)&tailPtr, &(oplog->newNodeOid));
     ListNode* tail= (ListNode*)new(tailPtr.getVaddr()) ListNode();
 
+    oplog->op=OpStruct::done;
+    oplog2->op=OpStruct::done;
 
     pptr<ListNode >nullPtr(0,0);
 
@@ -361,5 +366,49 @@ uint64_t LinkedList::scan(Key_t startKey, int range, std::vector<Val_t> &rangeVe
     return rangeVector.size();
 }
 
-bool LinkedList::Recovery() {
+bool LinkedList::Recovery(void* p_sl) {
+   genId+=1;
+   SearchLayer *sl = (SearchLayer *)p_sl;
+   int i=0;
+   for(i=0; i<1000*112; i++){
+       OpStruct *oplog = (OpStruct*)PMem::getOpLog(i); 
+       if((oplog->op == OpStruct::insert)){
+           pptr<ListNode> node;
+           pptr<ListNode> next_node;
+           node.setRawPtr(oplog->oldNodePtr);  
+	   next_node = node->getNextPtr();
+           if((next_node.getVaddr()!=pmemobj_direct(oplog->newNodeOid))){
+                printf("case 1\n");
+		// not connected
+		pmemobj_free(&oplog->newNodeOid);
+                next_node = node->recoverSplit(oplog);
+           }
+	   else{
+               node->recoverNode(oplog->key);
+                if(sl->isEmpty()){
+                    sl->insert(oplog->key,oplog->oldNodePtr);
+                }
+                else if(sl->lookup(oplog->key)!=oplog->oldNodePtr){
+                    sl->insert(oplog->key,oplog->oldNodePtr);
+                }
+           }
+           ListNode* nnextNode = next_node->getNext();
+           nnextNode->setPrev(next_node);
+           oplog->op=OpStruct::done;
+       }
+       else if((oplog->op == OpStruct::remove)){
+           pptr<ListNode> node; // deleting node
+           pptr<ListNode> prev_node;
+           node.setRawPtr(oplog->oldNodePtr);   
+	   prev_node = node->getPrevPtr();
+           prev_node->recoverMergingNode(node.getVaddr());
+           if(sl->isEmpty()){
+		;
+           }
+           else if(sl->lookup(oplog->key)==(void*)node.getRawPtr()){
+               sl->remove(oplog->key,(void*)node.getRawPtr());
+           }
+           pmemobj_free(&oplog->newNodeOid);
+       }
+   }
 }

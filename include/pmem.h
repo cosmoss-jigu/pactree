@@ -117,14 +117,15 @@ class PMem {
 					return false;
 				}
 				baseAddresses[poolId*3+2] = reinterpret_cast<void*>(pop);
-				PMEMoid logSpace;
+				PMEMoid g_root = pmemobj_root(pop, sizeof(PMEMoid));
 				//       PMEMoid g_root = pmemobj_root(pop, 64UL*1024UL*1024UL*1024UL);
-				int ret = pmemobj_alloc(pop, &logSpace, 512UL*1024UL*1024UL, 0, NULL, NULL);
+				int ret = pmemobj_alloc(pop, &g_root, 512UL*1024UL*1024UL, 0, NULL, NULL);
 				if(ret){
 					std::cerr<<"!!! alloc error"<<std::endl;	
 					return false;
 				}
-				logVaddr[poolId] = pmemobj_direct(logSpace);
+				logVaddr[poolId] = pmemobj_direct(g_root);
+				memset((void*)logVaddr[poolId],0,512UL*1024UL*1024UL);
 			}
 			else{
 				//TODO FIX IT
@@ -133,7 +134,7 @@ class PMem {
 					std::cerr<<"bind log open error"<<std::endl;	
 					return false;
 				}
-				PMEMoid g_root = pmemobj_root(pop, 64UL*1024UL*1024UL*1024UL);
+				PMEMoid g_root = pmemobj_root(pop, sizeof(PMEMoid));
 				baseAddresses[poolId*3+2] = reinterpret_cast<void*>(pop);
 				logVaddr[poolId] = pmemobj_direct(g_root);
 			}
@@ -148,6 +149,7 @@ class PMem {
 
 		static void* getOpLog(int i){
 			unsigned long vaddr = (unsigned long)logVaddr[0];
+			//printf("vaddr :%p %p\n",vaddr, (void *)(vaddr+(64*i)));
 
 			return (void*)(vaddr + (64*i));
 		}

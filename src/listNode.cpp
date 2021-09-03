@@ -8,6 +8,7 @@
 thread_local int logCnt=0;
 thread_local int coreId=-1;
 extern thread_local ThreadData* curThreadData;
+std::mutex mtx[112];
 
 ListNode :: ListNode(){
     deleted = false;
@@ -136,11 +137,16 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
 
     int chip, core;
     read_coreid_rdtscp(&chip,&core);
-	if(core!=coreId)
-		coreId=core;
+    if(core!=coreId)
+	coreId=core;
 
-    int numLogsPerThread = 80000;
+    mtx[core].lock();
+    int numLogsPerThread = 1000;
     int logIdx= numLogsPerThread *(core) + logCnt;
+    logCnt++;
+    if(logCnt==numLogsPerThread){
+	logCnt=0;
+    }
     OpStruct* oplog;
 
 #ifdef MULTIPOOL
@@ -148,16 +154,16 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
 #else
     uint16_t poolId = 1;
 #endif
-    pptr<ListNode> oplogPtr;
+    /*pptr<ListNode> oplogPtr;
     PMEMoid oid;
     PMem::alloc(poolId,sizeof(OpStruct),(void **)&(oplogPtr), &oid);
-    oplog=(OpStruct *) oplogPtr.getVaddr();
+    oplog=(OpStruct *) oplogPtr.getVaddr();*/
 
+    oplog = (OpStruct *)PMem::getOpLog(logIdx);
     // 1) Add Oplog and set the infomration for current(overflown) node.
     Oplog::writeOpLog(oplog, OpStruct::insert, newMin, (void*)curPtr.getRawPtr(), poolId, key, val); 
     flushToNVM((char*)oplog,sizeof(OpStruct));
     smp_wmb();
-
     // 2) Allocate new data node and store persistent pointer to the oplog.
     pptr<ListNode> newNodePtr;
     PMem::alloc(poolId,sizeof(ListNode),(void **)&(newNodePtr),&(oplog->newNodeOid));
@@ -220,7 +226,8 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
     ListNode* nextNode = newNodePtr->getNext();
     nextNode->setPrev(newNodePtr);
     Oplog::enqPerThreadLog(oplog);
-	*olog=oplog;
+    *olog=oplog;
+    mtx[core].unlock();
 
     return newNodePtr;
 }
@@ -241,8 +248,13 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
     if(core!=coreId)
 	coreId=core;
 
-    int numLogsPerThread = 80000;
+    mtx[core].lock();
+    int numLogsPerThread = 1000;
     int logIdx= numLogsPerThread *(core) + logCnt;
+    logCnt++;
+    if(logCnt==numLogsPerThread){
+	logCnt=0;
+    }
     OpStruct* oplog;
 
 #ifdef MULTIPOOL
@@ -250,15 +262,17 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
 #else
     uint16_t poolId = 1;
 #endif
-    pptr<ListNode> oplogPtr;
+/*    pptr<ListNode> oplogPtr;
     PMEMoid oid;
     PMem::alloc(poolId,sizeof(OpStruct),(void **)&(oplogPtr), &oid);
-    oplog=(OpStruct *) oplogPtr.getVaddr();
+    oplog=(OpStruct *) oplogPtr.getVaddr();*/
+    oplog = (OpStruct *)PMem::getOpLog(logIdx);
 	    
     // 1) Add Oplog and set the infomration for current(overflown) node.
     Oplog::writeOpLog(oplog, OpStruct::insert, newMin, (void*)curPtr.getRawPtr(), poolId, key, val); 
     flushToNVM((char*)oplog,sizeof(OpStruct));
-    smp_wmb();
+    //smp_wmb();
+    //exit(1); //case 1
 
     // 2) Allocate new data node and store persistent pointer to the oplog.
     pptr<ListNode> newNodePtr;
@@ -294,6 +308,7 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
 
     //    3-2) Setting next pointer to the New node 
     nextPtr = newNodePtr;
+    //exit(1); //case 2
 
     //    3-3) Update overflown node 
     //    3-4) Make copy of the bitmap and update the bitmap value.
@@ -324,39 +339,45 @@ pptr<ListNode> ListNode :: split(Key_t key, Val_t val, uint8_t keyHash, int thre
     Oplog::enqPerThreadLog(oplog);
 
 
+    mtx[core].unlock();
+    //exit(1); //case 3
     return newNodePtr;
 }
 
 ListNode* ListNode :: mergeWithNext(uint64_t genId)
 {
 
-
+//exit(1);
     ListNode* deleteNode = nextPtr.getVaddr();
     if (!deleteNode->writeLock(genId)) return nullptr;
 
 
     // 1) Add Oplog and set the infomration for current(overflown) node.
     
-    int numLogsPerThread = 50;
-    int threadId =3;
-    int logIdx= numLogsPerThread *(threadId) + logCnt;
-    OpStruct* oplog = (OpStruct *)PMem::getOpLog(logIdx);
+    int numLogsPerThread = 1000;
 	    
-    if(logIdx == (threadId+1)*numLogsPerThread){
-        oplog = (OpStruct *)PMem::getOpLog(numLogsPerThread*threadId);
-		if(oplog->op==OpStruct::done){
-	   		logCnt= 1;
-		}
-    }
-    else
-        logCnt++;
+    int chip, core;
+    read_coreid_rdtscp(&chip,&core);
+    if(core!=coreId)
+	coreId=core;
 
-    
+    mtx[core].lock();
+    int logIdx= numLogsPerThread *(core) + logCnt;
+    logCnt++;
+    OpStruct* oplog = (OpStruct *)PMem::getOpLog(logIdx);
+
+#ifdef MULTIPOOL
+    uint16_t poolId = (uint16_t)(3*chip+1);
+#else
     uint16_t poolId = 1;
+#endif
+
     Oplog::writeOpLog(oplog, OpStruct::remove, getMin(),(void*)getNextPtr().getRawPtr(), poolId, -1, -1); 
     oplog->newNodeOid = pmemobj_oid(deleteNode);
     flushToNVM((char*)oplog,sizeof(OpStruct));
     smp_wmb();
+//    printf("case 4\n");
+ //   exit(0); //case 4
 
     int cur = 0;
     for (int i = 0; i < MAX_ENTRIES; i++) {
@@ -383,6 +404,9 @@ ListNode* ListNode :: mergeWithNext(uint64_t genId)
     next->setPrev(curPtr);
     flushToNVM((char*)next, L1_CACHE_BYTES);
     smp_wmb();
+    mtx[core].unlock();
+    //printf("case 5\n");
+    //exit(0); //case 4
 
     return deleteNode;
 }
@@ -393,6 +417,35 @@ ListNode* ListNode :: mergeWithPrev(uint64_t genId)
     ListNode* mergeNode = prevPtr.getVaddr();
     if (!mergeNode->writeLock(genId)) return nullptr;
 
+// 1) Add Oplog and set the infomration for current(overflown) node.
+    
+    int numLogsPerThread = 1000;
+	    
+    int chip, core;
+    read_coreid_rdtscp(&chip,&core);
+    if(core!=coreId)
+	coreId=core;
+
+    mtx[core].lock();
+    int logIdx= numLogsPerThread *(core) + logCnt;
+    logCnt++;
+    OpStruct* oplog = (OpStruct *)PMem::getOpLog(logIdx);
+
+#ifdef MULTIPOOL
+    uint16_t poolId = (uint16_t)(3*chip+1);
+#else
+    uint16_t poolId = 1;
+#endif
+
+    Oplog::writeOpLog(oplog, OpStruct::remove, mergeNode->getMin(),(void*)mergeNode->getNextPtr().getRawPtr(), poolId, -1, -1); 
+    oplog->newNodeOid = pmemobj_oid(deleteNode);
+    flushToNVM((char*)oplog,sizeof(OpStruct));
+    smp_wmb();
+    //printf("case 6\n");
+    //exit(1); //case 6
+    
+
+
     int cur = 0;
     for (int i = 0; i < MAX_ENTRIES; i++) {
         if (deleteNode->getBitMap()->test(i)) {
@@ -402,23 +455,33 @@ ListNode* ListNode :: mergeWithPrev(uint64_t genId)
                     Key_t key = deleteNode->getKeyArray()[i].first;
                     Val_t val = deleteNode->getValueArray()[i].second;
                     mergeNode->insertAtIndex(std::make_pair(key, val), j, keyHash, false);
-                    deleteNode->removeFromIndex(i);
                     cur = j + 1;
                     break;
                 }
             }
         }
     }
+    flushToNVM((char*)mergeNode, sizeof(ListNode));
+    smp_wmb();
+   // printf("case 7\n");
+   //exit(1); //case 7
 
     ListNode *next = deleteNode->getNext();
+    mergeNode->setMax(deleteNode->getMax());
     mergeNode->setNext(deleteNode->getNextPtr());
+    flushToNVM((char*)mergeNode, L1_CACHE_BYTES);
+    smp_wmb();
+   // printf("case 8\n");
+   //exit(1); //case 8
 
     next->setPrev(prevPtr);
-    deleteNode->setDeleted(true);
-    mergeNode->setMax(deleteNode->getMax());
+    flushToNVM((char*)next, L1_CACHE_BYTES);
+    smp_wmb();
 
+   //printf("case 9\n");
+   //exit(1); //case 9
     mergeNode->writeUnlock();
-    //deleteNode->writeUnlock();
+    mtx[core].unlock();
     return deleteNode;
 }
 
@@ -461,7 +524,6 @@ bool ListNode :: removeFromIndex(int index)
 
 uint8_t ListNode :: getKeyInsertIndex(Key_t key)
 {
-
     for (uint8_t i = 0; i < MAX_ENTRIES; i++) {
         if (!bitMap[i]) return i;
     }
@@ -859,25 +921,50 @@ int ListNode :: permuterLowerBound(Key_t key)
     } while (lower < upper);
     return (uint8_t) lower;
 }
+pptr<ListNode> ListNode::recoverSplit(OpStruct *olog){
+    uint8_t keyHash = getKeyFingerPrint(olog->newKey);
+    pptr<ListNode> newNodePtr=split(olog->newKey, olog->newVal, keyHash,0);
+    return newNodePtr;
+}
 
-void ListNode::recoverNode(OpStruct *oplog){
-    ListNode* next = this->getNext();
-    ListNode* nextPtrInLog = (ListNode*)pmemobj_direct(oplog->newNodeOid);
-    if(next == nextPtrInLog){
-        // delete duplicate entries
-        hydra::bitset curBitMap =  *(this->getBitMap());
-        for(int i=0; i<MAX_ENTRIES; i++){
-            if(next->getMin() <= keyArray[i].first){
-                curBitMap.reset(i);
+
+void ListNode::recoverNode(Key_t min_key){
+    // delete duplicate entries
+    hydra::bitset curBitMap =  *(this->getBitMap());
+    for(int i=0; i<MAX_ENTRIES; i++){
+        if(min_key <= keyArray[i].first){
+            curBitMap.reset(i);
+        }
+    }
+    bitMap = curBitMap;
+    flushToNVM((char*)this,L1_CACHE_BYTES);
+    smp_wmb();
+}
+
+void ListNode::recoverMergingNode(ListNode *deleted_node){
+    hydra::bitset curBitMap =  *(this->getBitMap());
+    bool exist = false;
+    int idx = -1;
+    for(int i=0; i<MAX_ENTRIES; i++){
+        exist =false;
+        idx = -1;
+        if(curBitMap[i]){
+            for(int j=0; j<MAX_ENTRIES; j++){
+                 if(deleted_node->getKeyArray()[i].first==keyArray[j].first){
+                        exist=true;
+			break;
+                 }
             }
         }
-        bitMap = curBitMap;
-        flushToNVM((char*)this,L1_CACHE_BYTES);
-        smp_wmb();
+        else if(idx==-1){
+            idx = i;
+        }
+        if(!exist){
+            Key_t key= deleted_node->getKeyArray()[i].first;
+            Val_t val = deleted_node->getKeyArray()[i].second;
+            uint8_t keyHash = getKeyFingerPrint(key);
+            insertAtIndex(std::make_pair(key, val), (uint8_t)idx, keyHash, true);
+        }
     }
-    else{
-         // dealloc newly allocated node
-         pmemobj_free(&(oplog->newNodeOid));
-   }
 }
 

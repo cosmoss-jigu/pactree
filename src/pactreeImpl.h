@@ -17,9 +17,8 @@ typedef LinkedList DataLayer;
 class pactreeImpl {
 private:
 //    SearchLayer sl;
-    pptr<SearchLayer> sl;
     DataLayer dl;
-    std::vector<std::thread*> wtArray; // CurrentOne but there should be numa number of threads
+    std::vector<std::thread*> *wtArray; // CurrentOne but there should be numa number of threads
     std::thread* combinerThead;
     static thread_local int threadNumaNode;
     void createWorkerThread(int numNuma,root_obj *root);
@@ -28,8 +27,8 @@ private:
     static int totalNumaActive;
     std::atomic<uint32_t> numThreads;
 
-
 public:
+    pptr<SearchLayer> sl;
     explicit pactreeImpl(int numNuma,root_obj *root);
     ~pactreeImpl();
     bool insert(Key_t &key, Val_t val);
@@ -38,6 +37,7 @@ public:
     void registerThread();
     void unregisterThread();
     Val_t lookup(Key_t &key);
+    void recover();
 #ifdef SYNC
     ListNode* getJumpNodewithLock(Key_t &key, void** node);
     bool JumpNodewithUnLock(void* node);

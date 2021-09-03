@@ -28,10 +28,11 @@ bool WorkerThread::applyOperation() {
         if (ops.op == OpStruct::insert){
             void *newNodePtr= reinterpret_cast<void*> (((unsigned long)(ops.poolId)) << 48 | (ops.newNodeOid.off));
             sl->insert(ops.key, newNodePtr);
+	    opsPtr->op =  OpStruct::done;
      	}
         else if (ops.op == OpStruct::remove) {
             sl->remove(ops.key, ops.oldNodePtr);
-	    ops.op = OpStruct::done;
+	    opsPtr->op =  OpStruct::done;
     	    flushToNVM((char*)&ops,sizeof(OpStruct));
             if (workerThreadId == 0) {
                 std::pair<uint64_t, void *> removePair;
@@ -42,13 +43,11 @@ bool WorkerThread::applyOperation() {
             }
         }
         else{
-			if(ops.op == OpStruct::done){
-				printf("done? %p\n",opsPtr);
-			}
-exit(1);
-			assert(0);
-		}
-        opsPtr->op = OpStruct::done;
+            if(ops.op == OpStruct::done){
+                printf("done? %p\n",opsPtr);
+            }
+            exit(1);
+        }
         flushToNVM((char*)opsPtr,sizeof(OpStruct));
         smp_wmb();
     }

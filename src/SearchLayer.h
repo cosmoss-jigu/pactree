@@ -8,6 +8,7 @@ private:
     Key_t curMin;
     pptr<ART_ROWEX::Tree> idxPtr;
     ART_ROWEX::Tree *idx;
+    ART_ROWEX::Tree *dummy_idx;
     uint32_t numInserts = 0;
     int numa;
 public:
@@ -24,6 +25,9 @@ public:
 			// 
 			minKey.setInt(0);
 			curMin = ULLONG_MAX;
+        		dummy_idx = new ART_ROWEX::Tree([] (TID tid,Key &key){
+		             key.setInt(*reinterpret_cast<uint64_t*>(tid));
+			});
 		}
 		else{
 #ifdef STRINGKEY
@@ -47,6 +51,9 @@ public:
 			idx = new(idxPtr.getVaddr()) ART_ROWEX::Tree([] (TID tid,Key &key){
 				key.setInt(*reinterpret_cast<uint64_t*>(tid));
 				});
+        		dummy_idx = new ART_ROWEX::Tree([] (TID tid,Key &key){
+		             key.setInt(*reinterpret_cast<uint64_t*>(tid));
+			});
 		}
 		else{
 			printf("here for string\n");
@@ -63,13 +70,19 @@ public:
 		//delete idx;
 	}
     void init(){
+        pptr<ART_ROWEX::Tree> dummyidxPtr;
         idx = (ART_ROWEX::Tree *)(idxPtr.getVaddr()); 
+        idx->genId++;
+        dummy_idx = new ART_ROWEX::Tree([] (TID tid,Key &key){
+             key.setInt(*reinterpret_cast<uint64_t*>(tid));
+	});
+
     }
     void setNuma(int numa){this->numa=numa;}
     void setKey(Key& k, uint64_t key) {k.setInt(key);}
 	void setKey(Key& k, StringKey<KEYLENGTH> key) {k.set(key.getData(), KEYLENGTH);}
     bool insert(Key_t key, void *ptr) {
-        auto t = idx->getThreadInfo();
+        auto t = dummy_idx->getThreadInfo();
         Key k;
         setKey(k, key);
         idx->insert(k, (unsigned long)ptr, t);
@@ -79,7 +92,7 @@ public:
         return true;
     }
     bool remove(Key_t key, void *ptr) {
-        auto t = idx->getThreadInfo();
+        auto t = dummy_idx->getThreadInfo();
         Key k;
         setKey(k, key);
         idx->remove(k, (unsigned long)ptr, t);
@@ -122,7 +135,7 @@ public:
     void* lookup(Key_t key) {
         if (key <= curMin)
             return nullptr;
-        auto t = idx->getThreadInfo();
+        auto t = dummy_idx->getThreadInfo();
         Key endKey;
         setKey(endKey, key);
 
@@ -133,7 +146,7 @@ public:
         if (key <= curMin){
             return nullptr;
 	}
-        auto t = idx->getThreadInfo();
+        auto t = dummy_idx->getThreadInfo();
         Key endKey;
         setKey(endKey, key);
 

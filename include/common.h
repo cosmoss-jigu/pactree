@@ -82,7 +82,7 @@ typedef uint64_t Val_t;
 
 class OpStruct {
 public:
-    enum Operation {insert, remove, done};
+    enum Operation {dummy, insert, remove, done};
     Operation op; // 4 
     uint16_t poolId; //2
     uint8_t hash;  //1

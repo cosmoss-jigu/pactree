@@ -89,7 +89,9 @@ public:
     hydra::bitset *getBitMap();
     uint8_t *getFingerPrintArray();
     bool getDeleted();
-    void recoverNode(OpStruct *oplog);
+    void recoverNode(Key_t);
+    pptr<ListNode> recoverSplit(OpStruct* olog);
+    void recoverMergingNode(ListNode *deleted_node);
 
 };
 #endif

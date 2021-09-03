@@ -49,7 +49,7 @@ namespace ART_ROWEX {
 	lockGenId = (version - tmp)>>32;
 	verLock = (uint32_t)(version-tmp);
 	new_ver += tmp;
-	new_ver += (genId<<32);
+	new_ver += ((uint64_t)genId<<32);
 	new_ver += 0b10;
 
 	if(lockGenId != genId){
@@ -102,7 +102,7 @@ namespace ART_ROWEX {
 	lockGenId = (version - tmp)>>32;
 	verLock = (uint32_t)(version-tmp);
 	new_ver += tmp;
-	new_ver += (genId<<32);
+	new_ver += ((uint64_t)genId<<32);
 	new_ver += 0b10;
 
 
@@ -226,17 +226,30 @@ namespace ART_ROWEX {
     uint16_t poolId = 0;
 #endif
 //FIX ME
-        pptr<OpStruct> ologPtr;
-		PMEMoid oid;
-		PMem::alloc(poolId,sizeof(OpStruct),(void **)&ologPtr, &oid);
-		OpStruct *olog = ologPtr.getVaddr();
+/*        pptr<OpStruct> ologPtr;
+	PMEMoid oid;
+	PMem::alloc(poolId,sizeof(OpStruct),(void **)&ologPtr, &oid);
+	OpStruct *olog = ologPtr.getVaddr();*/
         pptr<N> nBigPtr;
-		PMem::alloc(poolId,sizeof(biggerN),(void **)&nBigPtr, &(olog->newNodeOid));
-		biggerN *nBig = (biggerN *)new(nBigPtr.getVaddr()) biggerN(n->getLevel(),n->getPrefi());
+        unsigned long poolAddr = (unsigned long)pmemobj_pool_by_ptr(parentNode);
+        uint16_t id = -1;
+        unsigned long off= (unsigned long)parentNode - poolAddr;
+        for(int i=0; i<2; i++){
+	   if((unsigned long)PMem::getBaseOf(i*3) == poolAddr){
+                id = i;
+		break;
+           }
+        }
+        pptr<N> parentPtr(id,off);
+        oplog->op = OpStruct::insert;
+        oplog->oldNodePtr = (void*)parentPtr.getRawPtr();;
+ 
+	PMem::alloc(poolId,sizeof(biggerN),(void **)&nBigPtr, &(oplog->newNodeOid));
+	biggerN *nBig = (biggerN *)new(nBigPtr.getVaddr()) biggerN(n->getLevel(),n->getPrefi());
 
         n->copyTo(nBig);
         nBig->insert(key, val);
-		flushToNVM((char*)nBig, sizeof(biggerN));
+	flushToNVM((char*)nBig, sizeof(biggerN));
 
         parentNode->writeLockOrRestart(needRestart,genId);
         if (needRestart) {
@@ -246,6 +259,7 @@ namespace ART_ROWEX {
         }
 
         N::change(parentNode, keyParent, nBigPtr);
+        oplog->op = OpStruct::done;
         parentNode->writeUnlock();
 
         n->writeUnlockObsolete();
@@ -263,12 +277,26 @@ namespace ART_ROWEX {
     uint16_t poolId = 0;
 #endif
         pptr<N> nNewPtr;
-        pptr<OpStruct> ologPtr;
+/*        pptr<OpStruct> ologPtr;
 		PMEMoid oid;
 		PMem::alloc(poolId,sizeof(OpStruct),(void **)&ologPtr, &oid);
-		OpStruct *olog = ologPtr.getVaddr();
-		PMem::alloc(poolId,sizeof(curN),(void **)&nNewPtr,&(olog->newNodeOid));
-		curN *nNew = (curN *)new(nNewPtr.getVaddr()) curN(n->getLevel(),n->getPrefi());
+		OpStruct *olog = ologPtr.getVaddr();*/
+
+        unsigned long poolAddr = (unsigned long)pmemobj_pool_by_ptr(parentNode);
+        uint16_t id = -1;
+        unsigned long off= (unsigned long)parentNode - poolAddr;
+        for(int i=0; i<2; i++){
+	   if((unsigned long)PMem::getBaseOf(i*3) == poolAddr){
+                id = i;
+		break;
+           }
+        }
+        pptr<N> parentPtr(id,off);
+        oplog->op = OpStruct::insert;
+        oplog->oldNodePtr = (void*)parentPtr.getRawPtr();;
+ 
+        PMem::alloc(poolId,sizeof(curN),(void **)&nNewPtr,&(oplog->newNodeOid));
+	curN *nNew = (curN *)new(nNewPtr.getVaddr()) curN(n->getLevel(),n->getPrefi());
 
         n->copyTo(nNew);
         nNew->insert(key, val);
@@ -282,6 +310,7 @@ namespace ART_ROWEX {
         }
 
         N::change(parentNode, keyParent, nNewPtr);
+        oplog->op = OpStruct::done;
         parentNode->writeUnlock();
 
         n->writeUnlockObsolete();
@@ -431,14 +460,27 @@ namespace ART_ROWEX {
     uint16_t poolId = 0;
 #endif
 
-        pptr<N> nNewPtr;
+/*        pptr<N> nNewPtr;
         pptr<OpStruct> ologPtr;
 		PMEMoid oid;
 		PMem::alloc(poolId,sizeof(OpStruct),(void **)&ologPtr, &oid);
-		OpStruct *olog = ologPtr.getVaddr();
+		OpStruct *olog = ologPtr.getVaddr();*/
         pptr<N> nSmallPtr;
+        unsigned long poolAddr = (unsigned long)pmemobj_pool_by_ptr(parentNode);
+        uint16_t id = -1;
+        unsigned long off= (unsigned long)parentNode - poolAddr;
+        for(int i=0; i<2; i++){
+	   if((unsigned long)PMem::getBaseOf(i*3) == poolAddr){
+                id = i;
+		break;
+           }
+        }
+        pptr<N> parentPtr(id,off);
+        
         //pptr<curN> nSmallPtr;
-		PMem::alloc(poolId,sizeof(smallerN),(void **)&nSmallPtr,&(olog->newNodeOid));
+                oplog->op = OpStruct::insert;
+                oplog->oldNodePtr = (void*)parentPtr.getRawPtr();;
+		PMem::alloc(poolId,sizeof(smallerN),(void **)&nSmallPtr,&(oplog->newNodeOid));
 		smallerN *nSmall= (smallerN *)new(nSmallPtr.getVaddr()) smallerN(n->getLevel(),n->getPrefi());
 
 /*	nSmall->eetType(nodeType);
@@ -457,6 +499,7 @@ namespace ART_ROWEX {
         n->copyTo(nSmall);
 	flushToNVM((char*)nSmall,sizeof(smallerN));
         N::change(parentNode, keyParent, nSmallPtr);
+        oplog->op = OpStruct::done;
 
         parentNode->writeUnlock();
         n->writeUnlockObsolete();

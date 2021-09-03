@@ -170,7 +170,8 @@ void pactreeImpl::createWorkerThread(int numNuma, root_obj *root) {
     for(int i = 0; i < numNuma * WORKER_THREAD_PER_NUMA; i++) {
         threadInitialized[i % numNuma] = false;
         std::thread* wt = new std::thread(workerThreadExec, i, numNuma,root);
-        wtArray.push_back(wt);
+	usleep(1);
+        wtArray->push_back(wt);
         pinThread(wt, i % numNuma);
         threadInitialized[i % numNuma] = true;
     }
@@ -195,6 +196,7 @@ pactreeImpl *initPT(int numa){
    PMem::bind(0,sl_path,sl_size,(void **)&sl_root,&isCreated);
     if (isCreated == 0) {
         printf("Reading Search layer from an existing pactree.\n");
+	
     }
     const char* log_path = "/mnt/pmem0/log";
     PMem::bindLog(0,log_path,sz);
@@ -211,7 +213,6 @@ pactreeImpl *initPT(int numa){
    PMem::bind(4,path2,sz,(void **)&root2,&isCreated);
    PMem::bindLog(1,log_path2,sz);
 #endif
-
     if (isCreated2 == 0) {
 		pactreeImpl *pt = (pactreeImpl*) pmemobj_direct(root->ptr[0]);
 		pt->init(numa,sl_root);
@@ -228,8 +229,15 @@ pactreeImpl *initPT(int numa){
 }
 
 void pactreeImpl::init(int numNuma, root_obj* root) {
+    int id = 0; 
+
     assert(numNuma <= NUM_SOCKET);
     totalNumaActive = numNuma;
+    wtArray= new std::vector<std::thread*>(totalNumaActive);
+    g_WorkerThreadInst.clear();
+    g_perNumaSlPtr.clear();
+    g_threadDataSet.clear();
+  
     g_perNumaSlPtr.resize(totalNumaActive);
     g_globalStop = false;
     g_combinerStop = false;
@@ -238,6 +246,7 @@ void pactreeImpl::init(int numNuma, root_obj* root) {
     for(int i = 0; i < totalNumaActive; i++) {
         while(slReady[i] == false);
     }
+    recover();
     hydralist_reset_timers();
 }
 
@@ -245,6 +254,7 @@ pactreeImpl::pactreeImpl(int numNuma, root_obj* root) {
 
     assert(numNuma <= NUM_SOCKET);
     totalNumaActive = numNuma;
+    wtArray= new std::vector<std::thread*>(totalNumaActive);
     g_perNumaSlPtr.resize(totalNumaActive);
     dl.initialize();
     // need to read from PM 
@@ -267,7 +277,7 @@ pactreeImpl::pactreeImpl(int numNuma, root_obj* root) {
 
 pactreeImpl::~pactreeImpl() {
     g_globalStop = true;
-    for (auto &t : wtArray)
+    for (auto &t : *wtArray)
         t->join();
     combinerThead->join();
     
@@ -456,4 +466,8 @@ void pactreeImpl::unregisterThread() {
     total_dl_time.fetch_add(curThreadData->dltime);
     total_sl_time.fetch_add(curThreadData->sltime);
 #endif
+}
+
+void pactreeImpl::recover() {
+    dl.Recovery(g_perNumaSlPtr[0]);
 }
